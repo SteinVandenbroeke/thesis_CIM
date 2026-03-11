@@ -19,7 +19,6 @@ import utils.logging
 # thread safe and causes unwanted GPU memory allocations.
 cv2.ocl.setUseOpenCL(False)
 
-
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -60,6 +59,13 @@ def parse_args():
 from pycocotools.coco import COCO
 from pycocotools.cocoeval import COCOeval    
 import numpy as np
+
+# np.float = float    
+# np.int = int      # Adding these too, as older code almost always uses them!
+# np.bool = bool
+# np.object = object
+
+
 class BoxEvaluator(object):
     def __init__(self, dataset_json, preds_json):
         self.dataset = COCO(dataset_json)

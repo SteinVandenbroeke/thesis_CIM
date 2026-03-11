@@ -1,7 +1,7 @@
 # Editable
-dataset=coco_val
-result_file=result/CIM-COCO-val.json
-save_dir=./vis_COCO_val
+dataset=voc_val
+result_file=result/CIM-VOC-val.json
+save_dir=./vis_VOCO12_val
 
 ##############
 # Not editable

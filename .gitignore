@@ -1,1 +1,13 @@
+vis_VOCO12_val
+env
+.run_env1
+.run_venv
+run_venv
+result
+condaenv
+*__pycache__*
+*ipynb_checkpoints*
+lib/build
+Outputs
+data
 .idea
