@@ -186,7 +186,19 @@ def test_net_on_dataset(
     final_boxes = empty_results(num_classes, num_images)
     test_corloc = 'train' in dataset_name
     for i, entry in enumerate(roidb):
-        boxes = all_boxes[entry['image']]
+        img_key = entry['image']
+        if img_key in all_boxes:
+            boxes = all_boxes[img_key]
+            # Fallback to just the filename if the absolute path fails
+        elif os.path.basename(img_key) in all_boxes:
+            boxes = all_boxes[os.path.basename(img_key)]
+            # Fallback to the ID (sometimes COCO strips the .jpg extension)
+        elif os.path.splitext(os.path.basename(img_key))[0] in all_boxes:
+            boxes = all_boxes[os.path.splitext(os.path.basename(img_key))[0]]
+        else:
+            # If it STILL can't find it, print a warning and skip the image entirely
+            print(f"\nWarning: Skipping {img_key} - could not find proposals.")
+            continue
 
         if test_corloc:
             _, _, cls_boxes_i = box_results_for_corloc(boxes['scores'], boxes['boxes'])

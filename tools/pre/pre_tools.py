@@ -36,6 +36,6 @@ def imresize(arr, size, interp='bilibear', mode=None):
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        '--dataset', required=True, choices=["voc", "coco"],
+        '--dataset', required=True, choices=["voc", "coco", "cub_as_coco"],
         help='Dataset to use')
     return parser.parse_args()

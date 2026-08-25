@@ -87,7 +87,7 @@ def _coco_bbox_results_one_category(json_dataset, boxes, cat_id):
         dets = boxes[i]
         if isinstance(dets, list) and len(dets) == 0:
             continue
-        dets = dets.astype(np.float)
+        dets = dets.astype(float)
         scores = dets[:, -1]
         xywh_dets = box_utils.xyxy_to_xywh(dets[:, 0:4])
         xs = xywh_dets[:, 0]

@@ -1,62 +1,43 @@
-# -*- coding: utf-8 -*-
-
-from chainer.backends import cuda
-
-
-def mask_iou(mask_a, mask_b):
-    if mask_a.shape[1:] != mask_b.shape[1:]:
-        raise IndexError
-    xp = cuda.get_array_module(mask_a)
-    n_mask_a = len(mask_a)
-    n_mask_b = len(mask_b)
-    iou = xp.empty((n_mask_a, n_mask_b), dtype=xp.float32)
-    for n, m_a in enumerate(mask_a):
-        for k, m_b in enumerate(mask_b):
-            intersect = xp.bitwise_and(m_a, m_b).sum()
-            union = xp.bitwise_or(m_a, m_b).sum()
-            iou[n, k] = intersect / union
-    return iou
-
-def mask_asymmetric_iou(mask_a, mask_b):
-    if mask_a.shape[1:] != mask_b.shape[1:]:
-        raise IndexError
-    xp = cuda.get_array_module(mask_a)
-    n_mask_a = len(mask_a)
-    n_mask_b = len(mask_b)
-    iou = xp.empty((n_mask_a, n_mask_b), dtype=xp.float32)
-    union = mask_b.sum()
-    for n, m_a in enumerate(mask_a): # 200
-        for k, m_b in enumerate(mask_b): # 1
-            intersect = xp.bitwise_and(m_a, m_b).sum()
-            iou[n, k] = intersect / union
-    return iou
+import torch
+import numpy as np
 
 
-def mask_inside(mask_a, mask_b):
-    if mask_a.shape[1:] != mask_b.shape[1:]:
-        raise IndexError
-    xp = cuda.get_array_module(mask_a)
-    n_mask_a = len(mask_a)
-    n_mask_b = len(mask_b)
-    iou = xp.empty((n_mask_a, n_mask_b), dtype=xp.float32)
-    for n, m_a in enumerate(mask_a):
-        for k, m_b in enumerate(mask_b):
-            intersect = xp.bitwise_and(m_a, m_b).sum()
-            union = xp.bitwise_or(m_b, m_b).sum()
-            iou[n, k] = intersect / union
-    return iou
+def mask_iou(masks_a, masks_b):
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+    # Safely convert incoming data (even CuPy arrays) to PyTorch tensors
+    if not isinstance(masks_a, torch.Tensor):
+        if hasattr(masks_a, 'get'): masks_a = masks_a.get()
+        masks_a = torch.tensor(masks_a, device=device, dtype=torch.bool)
+    if not isinstance(masks_b, torch.Tensor):
+        if hasattr(masks_b, 'get'): masks_b = masks_b.get()
+        masks_b = torch.tensor(masks_b, device=device, dtype=torch.bool)
+
+    intersection = torch.logical_and(masks_a, masks_b).sum(dim=(1, 2))
+    union = torch.logical_or(masks_a, masks_b).sum(dim=(1, 2))
+
+    iou = torch.zeros_like(intersection, dtype=torch.float32)
+    valid = union > 0
+    iou[valid] = intersection[valid].float() / union[valid].float()
+
+    return iou.unsqueeze(1).cpu().numpy()
 
 
-def mask_outside(mask_a, mask_b):
-    if mask_a.shape[1:] != mask_b.shape[1:]:
-        raise IndexError
-    xp = cuda.get_array_module(mask_a)
-    n_mask_a = len(mask_a)
-    n_mask_b = len(mask_b)
-    iou = xp.empty((n_mask_a, n_mask_b), dtype=xp.float32)
-    for n, m_a in enumerate(mask_a):
-        for k, m_b in enumerate(mask_b):
-            intersect = xp.bitwise_and(m_a, m_b).sum()
-            union = xp.bitwise_or(m_a, m_a).sum()
-            iou[n, k] = intersect / union
-    return iou
+def mask_asymmetric_iou(masks_a, masks_b):
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+    if not isinstance(masks_a, torch.Tensor):
+        if hasattr(masks_a, 'get'): masks_a = masks_a.get()
+        masks_a = torch.tensor(masks_a, device=device, dtype=torch.bool)
+    if not isinstance(masks_b, torch.Tensor):
+        if hasattr(masks_b, 'get'): masks_b = masks_b.get()
+        masks_b = torch.tensor(masks_b, device=device, dtype=torch.bool)
+
+    intersection = torch.logical_and(masks_a, masks_b).sum(dim=(1, 2))
+    area_a = masks_a.sum(dim=(1, 2))
+
+    iou = torch.zeros_like(intersection, dtype=torch.float32)
+    valid = area_a > 0
+    iou[valid] = intersection[valid].float() / area_a[valid].float()
+
+    return iou.unsqueeze(1).cpu().numpy()

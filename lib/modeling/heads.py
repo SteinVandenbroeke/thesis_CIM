@@ -8,7 +8,35 @@ import json
 # PCL loss
 # https://arxiv.org/pdf/1807.03342.pdf
 def PCL_loss(predict_cls, mat, labels):
+    # --- ALIGNMENT SAFEGUARD START ---
+    # Find whichever is smaller: the surviving features or the matrix size
+    n_real = min(predict_cls.shape[0], mat.shape[0])
+
+    if n_real == 0:
+        return torch.tensor(0.0, device=predict_cls.device, requires_grad=True)
+
+    # Trim both tensors to match perfectly
+    predict_cls = predict_cls[:n_real]
+    mat = mat[:n_real, :]
+    # --- ALIGNMENT SAFEGUARD END ---
+
     loss = torch.tensor(0.).cuda(device=labels.device)
+
+    # --- EDGE CASE SAFEGUARD START ---
+    # 1. Force 2D shapes to prevent 1D dimension crashes (if image has exactly 1 proposal)
+    if predict_cls.dim() == 1:
+        predict_cls = predict_cls.unsqueeze(0)
+    if mat.dim() == 1:
+        mat = mat.unsqueeze(0)
+    if mat.dim() == 0:
+        mat = mat.view(1, 1)
+
+    # 2. Align matrix sizes (prevents IndexErrors if dataloader padded one tensor but not the other)
+    n_real = min(predict_cls.size(0), mat.size(0))
+
+    # 3. Handle 0 proposals (safely returns 0 loss so the training loop survives and moves to the next image)
+    if n_real == 0:
+        return torch.tensor(0.0, device=predict_cls.device, requires_grad=True)
 
     # find background index
     bg_ind = np.setdiff1d(mat[:, 0].cpu().numpy(), [0])
@@ -263,7 +291,7 @@ class CIM_layer(nn.Module):
             label = label.squeeze()
 
         assert label.dim() == 1
-        assert label.shape[-1] == 20 or label.shape[-1] == 80
+        assert label.shape[-1] == 20 or label.shape[-1] == 80 or label.shape[-1] == 200
 
         # bg remove
         preds = (preds if preds.shape[-1] == label.shape[-1] else preds[:, 1:]).clone()  # remove background class if present
@@ -321,7 +349,7 @@ class CIM_layer(nn.Module):
             label = label.squeeze()
 
         assert label.dim() == 1
-        assert label.shape[-1] == 20 or label.shape[-1] == 80
+        assert label.shape[-1] == 20 or label.shape[-1] == 80 or label.shape[-1] == 200
 
         # remove background
         predict_cls = (predict_cls[:, 1:] if predict_cls.shape[-1]-1 == label.shape[-1] else predict_cls).clone()  # remove background class if present
@@ -442,7 +470,7 @@ class CIM_layer(nn.Module):
                 label = labels
 
             assert label.dim() == 1
-            assert label.shape[-1] == 20 or label.shape[-1] == 80
+            assert label.shape[-1] == 20 or label.shape[-1] == 80 or label.shape[-1] == 200
 
             klasses = label.nonzero(as_tuple=True)[0]
 
@@ -455,9 +483,18 @@ class CIM_layer(nn.Module):
                     continue
 
                 prob = gt_weights[class_idx].cpu().numpy()
+
+                # --- SAFEGUARD START ---
+                prob_sum = prob.sum()
+                if np.isnan(prob_sum) or prob_sum == 0:
+                    # If scores are zero, fall back to an even/uniform distribution
+                    safe_p = np.ones(len(class_idx)) / len(class_idx)
+                else:
+                    safe_p = prob / prob_sum
+                # --- SAFEGUARD END ---
+
                 # sampling with replacement
-                sampled_class_idx = np.random.choice(class_idx, size=len(class_idx), replace=True,
-                                                     p=prob / prob.sum())
+                sampled_class_idx = np.random.choice(class_idx, size=len(class_idx), replace=True, p=safe_p)
                 sampled_class_idx = np.unique(sampled_class_idx)
 
                 # clean original labels

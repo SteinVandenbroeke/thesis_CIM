@@ -171,6 +171,9 @@ def main():
     if args.dataset == "coco2017train":
         cfg.TRAIN.DATASETS = ('coco_2017_train',)
         cfg.MODEL.NUM_CLASSES = 80
+    elif args.dataset == "cubtrain":
+        cfg.TRAIN.DATASETS = ('coco_2017_train',)
+        cfg.MODEL.NUM_CLASSES = 200
     elif args.dataset == 'voc2012trainaug':
         cfg.TRAIN.DATASETS = ('voc_2012_trainaug',)
         cfg.MODEL.NUM_CLASSES = 20
@@ -323,7 +326,7 @@ def main():
                     print('train_size value: %d different from the one in checkpoint: %d'
                           % (train_size, checkpoint['train_size']))
 
-            model.set_start(args.start_step * args.iter_size)
+            #model.set_start(args.start_step * args.iter_size)
 
             # reorder the params in optimizer checkpoint's params_groups if needed
             # misc_utils.ensure_optimizer_ckpt_params_order(param_names, checkpoint)

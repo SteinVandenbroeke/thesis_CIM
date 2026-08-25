@@ -22,8 +22,8 @@ useless_file = "assignment_label_rm_{}.pkl"
 os.makedirs(trash, exist_ok=True)
 
 def assign_coco2017(imgIds, worker_id, model, device, dataset, cocoGt):
-    img_dir = "./data/coco2017/train2017"
-    cob_original_file = "./data/coco2017/COB-COCO"
+    img_dir = "./data/CUB_200_2011/CUB_as_COCO/train2017"
+    cob_original_file = "./data/CUB_200_2011/CUB_as_COCO/COB-COCO"
     model = model.inference().to(device)
     sbd_proposals = dict(indexes=[], mat=[], score=[])
     for index in tqdm(range(len(imgIds))):  # index = 0
@@ -52,12 +52,17 @@ def assign_coco2017(imgIds, worker_id, model, device, dataset, cocoGt):
         # label
         ann_ids = cocoGt.getAnnIds(imgIds=img_id)
         anns = cocoGt.loadAnns(ann_ids)
-        boxes_cl = [coco_id_num_map[ann['category_id']] for ann in anns]
+        if dataset == "cub_as_coco":
+            # For CUB, subtract 1 because PyTorch expects classes to start at 0 (0-199)
+            boxes_cl = [ann['category_id'] - 1 for ann in anns]
+        else:
+            # Standard COCO behavior
+            boxes_cl = [coco_id_num_map[ann['category_id']] for ann in anns]
         boxes_cl = torch.tensor(boxes_cl).unique().to(device)
 
         # model
         visual_cues = model(inputs, boxes_cl, class_threshold=0, peak_threshold=10)
-        label_assignment = np.zeros((num_proposal, 81), dtype=np.float32)  # 0-80: 0 for bg, 1-80:fg
+        label_assignment = np.zeros((num_proposal, 201), dtype=np.float32)  # 0-80: 0 for bg, 1-80:fg
 
         if visual_cues == None:
             label_assignment[label_assignment.sum(1) == 0, 0] = cluster_idx
@@ -204,6 +209,10 @@ if __name__ == '__main__':
         label_file = "./data/coco2017/annotations/instances_train2017.json"
         assignment_label_file = "./data/label_assign/coco_2017_label_assign.pkl"
         prm_model_path = "./data/model_weight/prm_coco.pth"
+    elif dataset == "cub_as_coco":
+        label_file = "./data/CUB_200_2011/CUB_as_COCO/annotations/instances_train2017.json"
+        assignment_label_file = "./data/label_assign/cub_as_coco_2017_label_assign.pkl"
+        prm_model_path = "./data/model_weight/prm__CUB.pth"
     else:
         raise NotImplementedError
 
@@ -212,7 +221,7 @@ if __name__ == '__main__':
     print(prm_model_path)
 
     ###
-    worker = 8
+    worker = 4
 
     cocoGt = COCO(label_file)
     imgIds = sorted(cocoGt.getImgIds())
@@ -232,6 +241,29 @@ if __name__ == '__main__':
         except:
             pass
         model.load_state_dict(pretrained)
+    elif dataset == "cub_as_coco":
+        print("CUB AS COCO run")
+        assign_fun = assign_coco2017
+        # CHANGED: 200 classes for CUB instead of 80!
+        backbone = fc_resnet50(num_classes=200)
+        model = peak_response_mapping(backbone=backbone, sub_pixel_locating_factor=8)
+
+        pretrained = torch.load(prm_model_path, map_location=torch.device('cpu'))
+
+        # 1. Extract the actual weights based on how your specific file was saved
+        if 'state_dict' in pretrained:
+            pretrained = pretrained['state_dict']
+        elif 'model' in pretrained:
+            pretrained = pretrained['model']
+
+        # 2. Clean up the dictionary keys (removes 'module.' prefix if you trained on multiple GPUs)
+        clean_state_dict = {}
+        for k, v in pretrained.items():
+            name = k.replace("module.", "") if k.startswith("module.") else k
+            clean_state_dict[name] = v
+
+        # 3. Load the cleaned weights into the model
+        model.load_state_dict(clean_state_dict)
     else:
         assign_fun = assign_coco2017
         backbone = fc_resnet50(num_classes=80)
@@ -259,6 +291,7 @@ if __name__ == '__main__':
     res = dict(indexes=[], mat=[], score=[])
     worker_id = 0
     while (worker_id != worker):
+        print("done, adding", worker_id, worker)
         path = os.path.join(trash, useless_file.format(worker_id))
         try:
             result = pickle.load(open(path, 'rb'))
