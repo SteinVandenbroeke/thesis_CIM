@@ -12,3 +12,4 @@ Outputs/
 PRM-pytorch/
 __pycache__/
 tools/__pycache__/_init_paths.cpython-38.pyc
+data/model_weight/*.pth
